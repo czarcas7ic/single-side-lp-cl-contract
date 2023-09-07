@@ -1,0 +1,1 @@
+7e2aaeab656c70151a718ae26109d723566307fd49f5b0629e3bfd345742f5f9  /target/wasm32-unknown-unknown/release/outpost.wasm

@@ -1,0 +1,13 @@
+/Users/czar/Desktop/cw-single-sided-lp-cl/test/target/release/deps/quote-7cc5e12211f0efac.rmeta: /Users/czar/.cargo/registry/src/github.com-1ecc6299db9ec823/quote-1.0.33/src/lib.rs /Users/czar/.cargo/registry/src/github.com-1ecc6299db9ec823/quote-1.0.33/src/ext.rs /Users/czar/.cargo/registry/src/github.com-1ecc6299db9ec823/quote-1.0.33/src/format.rs /Users/czar/.cargo/registry/src/github.com-1ecc6299db9ec823/quote-1.0.33/src/ident_fragment.rs /Users/czar/.cargo/registry/src/github.com-1ecc6299db9ec823/quote-1.0.33/src/to_tokens.rs /Users/czar/.cargo/registry/src/github.com-1ecc6299db9ec823/quote-1.0.33/src/runtime.rs /Users/czar/.cargo/registry/src/github.com-1ecc6299db9ec823/quote-1.0.33/src/spanned.rs
+
+/Users/czar/Desktop/cw-single-sided-lp-cl/test/target/release/deps/libquote-7cc5e12211f0efac.rlib: /Users/czar/.cargo/registry/src/github.com-1ecc6299db9ec823/quote-1.0.33/src/lib.rs /Users/czar/.cargo/registry/src/github.com-1ecc6299db9ec823/quote-1.0.33/src/ext.rs /Users/czar/.cargo/registry/src/github.com-1ecc6299db9ec823/quote-1.0.33/src/format.rs /Users/czar/.cargo/registry/src/github.com-1ecc6299db9ec823/quote-1.0.33/src/ident_fragment.rs /Users/czar/.cargo/registry/src/github.com-1ecc6299db9ec823/quote-1.0.33/src/to_tokens.rs /Users/czar/.cargo/registry/src/github.com-1ecc6299db9ec823/quote-1.0.33/src/runtime.rs /Users/czar/.cargo/registry/src/github.com-1ecc6299db9ec823/quote-1.0.33/src/spanned.rs
+
+/Users/czar/Desktop/cw-single-sided-lp-cl/test/target/release/deps/quote-7cc5e12211f0efac.d: /Users/czar/.cargo/registry/src/github.com-1ecc6299db9ec823/quote-1.0.33/src/lib.rs /Users/czar/.cargo/registry/src/github.com-1ecc6299db9ec823/quote-1.0.33/src/ext.rs /Users/czar/.cargo/registry/src/github.com-1ecc6299db9ec823/quote-1.0.33/src/format.rs /Users/czar/.cargo/registry/src/github.com-1ecc6299db9ec823/quote-1.0.33/src/ident_fragment.rs /Users/czar/.cargo/registry/src/github.com-1ecc6299db9ec823/quote-1.0.33/src/to_tokens.rs /Users/czar/.cargo/registry/src/github.com-1ecc6299db9ec823/quote-1.0.33/src/runtime.rs /Users/czar/.cargo/registry/src/github.com-1ecc6299db9ec823/quote-1.0.33/src/spanned.rs
+
+/Users/czar/.cargo/registry/src/github.com-1ecc6299db9ec823/quote-1.0.33/src/lib.rs:
+/Users/czar/.cargo/registry/src/github.com-1ecc6299db9ec823/quote-1.0.33/src/ext.rs:
+/Users/czar/.cargo/registry/src/github.com-1ecc6299db9ec823/quote-1.0.33/src/format.rs:
+/Users/czar/.cargo/registry/src/github.com-1ecc6299db9ec823/quote-1.0.33/src/ident_fragment.rs:
+/Users/czar/.cargo/registry/src/github.com-1ecc6299db9ec823/quote-1.0.33/src/to_tokens.rs:
+/Users/czar/.cargo/registry/src/github.com-1ecc6299db9ec823/quote-1.0.33/src/runtime.rs:
+/Users/czar/.cargo/registry/src/github.com-1ecc6299db9ec823/quote-1.0.33/src/spanned.rs:
