@@ -1,6 +1,6 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::Addr;
-use cosmwasm_std::{Coin, Decimal256, Env, QuerierWrapper, Storage, Uint128};
+use cosmwasm_std::{Coin, Uint128};
 
 /// Message type for `instantiate` entry_point
 #[cw_serde]
@@ -16,7 +16,7 @@ pub enum ExecuteMsg {
         pool_id: u64,
         lower_tick: i64,
         upper_tick: i64,
-        tokens_provided: Vec<Coin>,
+        token_provided: Coin,
         token_min_amount0: Uint128,
         token_min_amount1: Uint128,
     },
@@ -42,3 +42,11 @@ pub enum QueryMsg {
 // We define a custom struct for each query response
 // #[cw_serde]
 // pub struct YourQueryResponse {}
+
+// Response for Swap
+#[cw_serde]
+pub struct SwapResponse {
+    pub original_sender: String,
+    pub token_out_denom: String,
+    pub amount: Uint128,
+}

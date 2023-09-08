@@ -782,7 +782,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "single-sided-swap-cl"
+name = "single-sided-lp-cl"
 version = "0.1.0"
 dependencies = [
  "bech32",

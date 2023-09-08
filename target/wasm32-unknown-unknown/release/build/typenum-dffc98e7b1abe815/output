@@ -1,2 +1,0 @@
-cargo:rustc-env=TYPENUM_BUILD_CONSTS=/Users/czar/Desktop/cw-single-sided-lp-cl/test/target/wasm32-unknown-unknown/release/build/typenum-dffc98e7b1abe815/out/consts.rs
-cargo:rustc-env=TYPENUM_BUILD_OP=/Users/czar/Desktop/cw-single-sided-lp-cl/test/target/wasm32-unknown-unknown/release/build/typenum-dffc98e7b1abe815/out/op.rs

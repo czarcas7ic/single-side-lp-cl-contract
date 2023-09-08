@@ -1,7 +1,9 @@
 [package]
-name = "single-sided-swap-cl"
+name = "single-sided-lp-cl"
 version = "0.1.0"
-authors = ["Adam Tucker <adam@osmosis.team>"]
+authors = [
+  "Adam Tucker <adam@osmosis.team>,Nicolas Lara <nicolaslara@gmail.com>",
+]
 edition = "2021"
 rust-version = "1.65.0"
 

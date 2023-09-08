@@ -7,8 +7,6 @@ use thiserror::Error;
 
 use std::num::ParseIntError;
 
-pub type ContractResult<T> = Result<T, ContractError>;
-
 /// AutocompoundingVault errors
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -107,4 +105,10 @@ pub enum ContractError {
 
     #[error("Cannot handle negative powers in uints")]
     CannotHandleNegativePowersInUint {},
+
+    #[error("Denom (provided_denom) does not exist in pool")]
+    DenomNotInPool { provided_denom: String },
+
+    #[error("Failed Swap: {reason:?}")]
+    FailedSwap { reason: String },
 }

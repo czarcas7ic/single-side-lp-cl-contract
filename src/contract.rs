@@ -1,12 +1,16 @@
 #[cfg(not(feature = "imported"))]
 use cosmwasm_std::entry_point;
-use cosmwasm_std::{DepsMut, Env, MessageInfo, Response};
+use cosmwasm_std::{DepsMut, Env, MessageInfo, Reply, Response};
 use cw2::set_contract_version;
 
 use crate::error::ContractError;
-use crate::execute::create_position;
+use crate::execute::{handle_swap_reply, single_sided_swap_and_lp};
 use crate::msg::{ExecuteMsg, InstantiateMsg, MigrateMsg};
+use crate::state::SWAP_REPLY_STATES;
 use crate::state::{Config, CONFIG};
+
+// Msg Reply IDs
+pub const SWAP_REPLY_ID: u64 = 1u64;
 
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:outpost";
@@ -22,7 +26,6 @@ pub fn instantiate(
 ) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
-    // Store the contract addr and the osmosis channel
     let state = Config { owner: msg.owner };
     CONFIG.save(deps.storage, &state)?;
     Ok(Response::new().add_attribute("method", "instantiate"))
@@ -46,18 +49,37 @@ pub fn execute(
             pool_id,
             lower_tick,
             upper_tick,
-            tokens_provided,
+            token_provided,
             token_min_amount0,
             token_min_amount1,
-        } => create_position(
+        } => single_sided_swap_and_lp(
             &env,
             &info,
+            deps,
             pool_id,
             lower_tick,
             upper_tick,
-            tokens_provided,
+            token_provided,
             token_min_amount0,
             token_min_amount1,
         ),
+    }
+}
+
+#[cfg_attr(not(feature = "imported"), entry_point)]
+pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> Result<Response, ContractError> {
+    deps.api
+        .debug(&format!("executing swaprouter reply: {msg:?}"));
+    if msg.id == SWAP_REPLY_ID {
+        // get intermediate swap reply state. Error if not found.
+        let swap_msg_state = SWAP_REPLY_STATES.load(deps.storage, msg.id)?;
+
+        // prune intermedate state
+        SWAP_REPLY_STATES.remove(deps.storage, msg.id);
+
+        // call reply function to handle the swap return
+        handle_swap_reply(deps, env, msg, swap_msg_state)
+    } else {
+        Ok(Response::new())
     }
 }
