@@ -55,7 +55,7 @@ pub fn single_sided_swap_and_lp(
             let token_provided_dec =
                 Decimal256::from_str(token_provided.amount.to_string().as_str())?;
             token_provided_swap_amount = token_provided_dec
-                .checked_mul(Decimal256::one().checked_sub(asset_0_ratio.into())?)?
+                .checked_mul(asset_1_ratio)?
                 .to_uint_floor()
                 .try_into()?;
         }
@@ -71,7 +71,7 @@ pub fn single_sided_swap_and_lp(
             let token_provided_dec =
                 Decimal256::from_str(token_provided.amount.to_string().as_str())?;
             token_provided_swap_amount = token_provided_dec
-                .checked_mul(Decimal256::one().checked_sub(asset_1_ratio.into())?)?
+                .checked_mul(asset_0_ratio)?
                 .to_uint_floor()
                 .try_into()?;
         }
