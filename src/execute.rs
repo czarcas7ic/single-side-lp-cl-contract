@@ -37,33 +37,44 @@ pub fn single_sided_swap_and_lp(
         .ok_or(ContractError::PoolNotFound { pool_id: pool_id })?
         .try_into()
         .unwrap();
+    let current_tick = pool.current_tick;
 
     // Determine if the swap strategy is one for zero or zero for one
     // Then, determine how much of the token provided is needed to swap for the other token
     let token_out_denom: String;
     let token_in: Coin;
     let token_provided_swap_amount: Uint128;
+
+    let (asset_0_ratio, asset_1_ratio) =
+        calc_asset_ratio_from_ticks(upper_tick, current_tick, lower_tick)?;
+
     if token_provided.denom == pool.token0 {
-        token_provided_swap_amount = get_single_sided_deposit_0_to_1_swap_amount(
-            &deps.querier,
-            token_provided.amount,
-            lower_tick,
-            upper_tick,
-            pool.clone(),
-        )?;
+        if current_tick > upper_tick {
+            token_provided_swap_amount = token_provided.amount;
+        } else {
+            let token_provided_dec =
+                Decimal256::from_str(token_provided.amount.to_string().as_str())?;
+            token_provided_swap_amount = token_provided_dec
+                .checked_mul(Decimal256::one().checked_sub(asset_0_ratio.into())?)?
+                .to_uint_floor()
+                .try_into()?;
+        }
         token_out_denom = pool.token1;
         token_in = Coin {
             denom: pool.token0,
             amount: token_provided_swap_amount,
         };
     } else if token_provided.denom == pool.token1 {
-        token_provided_swap_amount = get_single_sided_deposit_1_to_0_swap_amount(
-            &deps.querier,
-            token_provided.amount,
-            lower_tick,
-            upper_tick,
-            pool.clone(),
-        )?;
+        if current_tick < lower_tick {
+            token_provided_swap_amount = token_provided.amount;
+        } else {
+            let token_provided_dec =
+                Decimal256::from_str(token_provided.amount.to_string().as_str())?;
+            token_provided_swap_amount = token_provided_dec
+                .checked_mul(Decimal256::one().checked_sub(asset_1_ratio.into())?)?
+                .to_uint_floor()
+                .try_into()?;
+        }
         token_out_denom = pool.token0;
         token_in = Coin {
             denom: pool.token1,
@@ -203,22 +214,25 @@ pub fn get_single_sided_deposit_0_to_1_swap_amount(
     querier: &QuerierWrapper,
     token0_balance: Uint128,
     lower_tick: i64,
+    current_tick: i64,
     upper_tick: i64,
     pool_config: Pool,
 ) -> Result<Uint128, ContractError> {
     let spot_price = Decimal256::from(get_spot_price(querier, pool_config)?);
     let lower_price = tick_to_price(lower_tick)?;
+    let current_price = tick_to_price(current_tick)?;
     let upper_price = tick_to_price(upper_tick)?;
-    let pool_metadata_constant: Uint128 = spot_price
+    let pool_metadata_constant_times_spot_price: Decimal256 = current_price
+        .sqrt()
         .checked_mul(lower_price.sqrt())?
-        .checked_mul(upper_price.sqrt())?
-        .to_uint_floor() // todo: this is big, so should be safe, right?
-        .try_into()?;
+        .checked_mul(upper_price.sqrt().checked_sub(current_price.sqrt())?)?
+        .checked_div(current_price.sqrt().checked_sub(lower_price.sqrt())?)?
+        .checked_mul(spot_price)?;
 
-    let swap_amount = token0_balance.checked_multiply_ratio(
-        pool_metadata_constant,
-        pool_metadata_constant.checked_add(Uint128::one())?,
-    )?;
+    let denominator = Decimal256::one()
+        .checked_add(Decimal256::one().checked_div(pool_metadata_constant_times_spot_price)?)?;
+
+    let swap_amount = token0_balance.checked_div(denominator.to_uint_floor().try_into()?)?;
 
     Ok(swap_amount)
 }
@@ -227,20 +241,62 @@ pub fn get_single_sided_deposit_1_to_0_swap_amount(
     querier: &QuerierWrapper,
     token1_balance: Uint128,
     lower_tick: i64,
+    current_tick: i64,
     upper_tick: i64,
     pool_config: Pool,
 ) -> Result<Uint128, ContractError> {
     let spot_price = Decimal256::from(get_spot_price(querier, pool_config)?);
     let lower_price = tick_to_price(lower_tick)?;
+    let current_price = tick_to_price(current_tick)?;
     let upper_price = tick_to_price(upper_tick)?;
-    let pool_metadata_constant: Uint128 = spot_price
+    let pool_metadata_constant_over_spot_price: Decimal256 = current_price
+        .sqrt()
         .checked_mul(lower_price.sqrt())?
-        .checked_mul(upper_price.sqrt())?
-        .to_uint_floor() // todo: this is big, so should be safe, right?
-        .try_into()?;
+        .checked_mul(upper_price.sqrt().checked_sub(current_price.sqrt())?)?
+        .checked_div(current_price.sqrt().checked_sub(lower_price.sqrt())?)?
+        .checked_div(spot_price)?;
 
-    let swap_amount =
-        token1_balance.checked_div(pool_metadata_constant.checked_add(Uint128::one())?)?;
+    let denominator = Decimal256::one().checked_add(pool_metadata_constant_over_spot_price)?;
+
+    let swap_amount = token1_balance.checked_div(denominator.to_uint_floor().try_into()?)?;
 
     Ok(swap_amount)
+}
+
+pub fn calc_amount_0_one_unit_liq(
+    upper_tick: i64,
+    current_tick: i64,
+) -> Result<Decimal256, ContractError> {
+    let p_upper = tick_to_price(upper_tick)?;
+    let p_current = tick_to_price(current_tick)?;
+    let delta_x = Decimal256::one()
+        .checked_mul(p_upper.sqrt().checked_sub(p_current.sqrt())?)?
+        .checked_div(p_upper.sqrt().checked_mul(p_current.sqrt())?)?;
+
+    Ok(delta_x)
+}
+
+pub fn calc_amount_1_one_unit_liq(
+    lower_tick: i64,
+    current_tick: i64,
+) -> Result<Decimal256, ContractError> {
+    let p_lower = tick_to_price(lower_tick)?;
+    let p_current = tick_to_price(current_tick)?;
+    let delta_y = Decimal256::one().checked_mul(p_current.sqrt().checked_sub(p_lower.sqrt())?)?;
+
+    Ok(delta_y)
+}
+
+pub fn calc_asset_ratio_from_ticks(
+    upper_tick: i64,
+    current_tick: i64,
+    lower_tick: i64,
+) -> Result<(Decimal256, Decimal256), ContractError> {
+    let delta_x = calc_amount_0_one_unit_liq(upper_tick, current_tick)?;
+    let delta_y = calc_amount_1_one_unit_liq(lower_tick, current_tick)?;
+    let total_delta = delta_x.checked_add(delta_y)?;
+    let asset0_ratio = delta_x.checked_div(total_delta)?;
+    let asset1_ratio = Decimal256::one().checked_sub(asset0_ratio)?;
+
+    Ok((asset0_ratio, asset1_ratio))
 }
