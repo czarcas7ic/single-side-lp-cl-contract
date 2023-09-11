@@ -50,7 +50,7 @@ cosmwasm-storage = "1.1.2"
 cw-storage-plus = "1.0.1"
 cw2 = "1.0.0"
 schemars = "0.8.11"
-osmosis-std = "0.17.0-rc0"
+osmosis-std = "0.19.1"
 serde = { version = "1.0.137", default-features = false, features = ["derive"] }
 thiserror = { version = "1.0.31" }
 serde-json-wasm = "0.5.0"
@@ -60,4 +60,5 @@ cw-utils = "1.0.0"
 itertools = "0.10"
 
 [dev-dependencies]
-cw-multi-test = "0.16.1"
+osmosis-test-tube = {git = 'https://github.com/osmosis-labs/test-tube.git', version = "19.0.0"}
+cw-multi-test = "0.16.2"

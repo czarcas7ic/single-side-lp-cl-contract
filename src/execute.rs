@@ -1,9 +1,9 @@
 use crate::contract::SWAP_REPLY_ID;
 use crate::state::{SwapMsgReplyState, SWAP_REPLY_STATES};
+use cosmwasm_std::Decimal256;
 use cosmwasm_std::{
     Coin, DepsMut, Env, MessageInfo, Reply, Response, SubMsg, SubMsgResponse, SubMsgResult, Uint128,
 };
-use cosmwasm_std::{Decimal256, QuerierWrapper};
 use osmosis_std::types::osmosis::concentratedliquidity::v1beta1::MsgCreatePosition;
 use osmosis_std::types::osmosis::concentratedliquidity::v1beta1::Pool;
 use osmosis_std::types::osmosis::poolmanager::v1beta1::MsgSwapExactAmountInResponse;
@@ -13,9 +13,16 @@ use std::str::FromStr;
 
 use crate::tick::tick_to_price;
 use crate::ContractError;
-use cosmwasm_std::Decimal;
 use osmosis_std::types::cosmos::authz::v1beta1::MsgExec;
 
+// swap_for_single_side_lp is the primary entry point for the contract
+// The paramaters to note are:
+// - pool_id: The id of the pool the position will be created in
+// - lower_tick: The desired lower tick of the position
+// - upper_tick: The desired upper tick of the position
+// - token_provided: The amount of tokens to be provided to the pool. This value must be a length of 1. This will be the token that is swapped for the other token.
+// - token_min_amount0: The minimum amount of token0 that will be used to create the position.
+// - token_min_amount1: The minimum amount of token1 that will be used to create the position.
 pub fn single_sided_swap_and_lp(
     env: &Env,
     info: &MessageInfo,
@@ -27,17 +34,15 @@ pub fn single_sided_swap_and_lp(
     token_min_amount0: Uint128,
     token_min_amount1: Uint128,
 ) -> Result<Response, ContractError> {
-    //let sender = env.contract.address.to_string();
     let sender = info.sender.to_string();
 
-    // Get the pool
+    // Get the pool the position will be created in
     let pool: Pool = PoolmanagerQuerier::new(&deps.querier)
         .pool(pool_id)?
         .pool
         .ok_or(ContractError::PoolNotFound { pool_id: pool_id })?
         .try_into()
         .unwrap();
-    let current_tick = pool.current_tick;
 
     // Determine if the swap strategy is one for zero or zero for one
     // Then, determine how much of the token provided is needed to swap for the other token
@@ -46,12 +51,14 @@ pub fn single_sided_swap_and_lp(
     let token_provided_swap_amount: Uint128;
 
     let (asset_0_ratio, asset_1_ratio) =
-        calc_asset_ratio_from_ticks(upper_tick, current_tick, lower_tick)?;
+        calc_asset_ratio_from_ticks(upper_tick, pool.current_tick, lower_tick)?;
 
     if token_provided.denom == pool.token0 {
-        if current_tick > upper_tick {
+        if pool.current_tick > upper_tick {
+            // If the current tick is greater than the upper tick, we will swap the entire amount of token0 for token1
             token_provided_swap_amount = token_provided.amount;
         } else {
+            // Otherwise, we utilize the ratio of assets to determine how much of token0 to swap for token1
             let token_provided_dec =
                 Decimal256::from_str(token_provided.amount.to_string().as_str())?;
             token_provided_swap_amount = token_provided_dec
@@ -65,9 +72,11 @@ pub fn single_sided_swap_and_lp(
             amount: token_provided_swap_amount,
         };
     } else if token_provided.denom == pool.token1 {
-        if current_tick < lower_tick {
+        if pool.current_tick < lower_tick {
+            // If the current tick is less than the lower tick, we will swap the entire amount of token1 for token0
             token_provided_swap_amount = token_provided.amount;
         } else {
+            // Otherwise, we utilize the ratio of assets to determine how much of token1 to swap for token0
             let token_provided_dec =
                 Decimal256::from_str(token_provided.amount.to_string().as_str())?;
             token_provided_swap_amount = token_provided_dec
@@ -128,7 +137,6 @@ pub fn single_sided_swap_and_lp(
             token_min_amount1: token_min_amount1,
             token_provided_remaining_coin: token_provided_remaining_coin,
             token_out_denom: token_out_denom,
-            swap_msg: swap_msg.clone(),
         },
     )?;
 
@@ -137,6 +145,8 @@ pub fn single_sided_swap_and_lp(
         .add_submessage(SubMsg::reply_on_success(exec_msg, SWAP_REPLY_ID)))
 }
 
+// handle_swap_reply is called after the swap has been executed successfully
+// This function will create the provided position on behalf of the user with the tokens that were provided and swapped
 pub fn handle_swap_reply(
     _deps: DepsMut,
     env: Env,
@@ -144,6 +154,7 @@ pub fn handle_swap_reply(
     swap_msg_reply_state: SwapMsgReplyState,
 ) -> Result<Response, ContractError> {
     if let SubMsgResult::Ok(SubMsgResponse { data: Some(b), .. }) = msg.result {
+        // Parse the swap response
         let res: MsgSwapExactAmountInResponse = b.try_into().map_err(ContractError::Std)?;
 
         // TODO: For some reason, this is returning a string with a new line character and a few other non relevant characters
@@ -192,75 +203,6 @@ pub fn handle_swap_reply(
     Err(ContractError::FailedSwap {
         reason: msg.result.unwrap_err(),
     })
-}
-
-// The methods below this comment are copied from the Quasar cl vault contract.
-
-/// get_spot_price
-///
-/// gets the spot price of the pool which this vault is managing funds in. This will always return token0 in terms of token1.
-pub fn get_spot_price(
-    querier: &QuerierWrapper,
-    pool_config: Pool,
-) -> Result<Decimal, ContractError> {
-    let pm_querier = PoolmanagerQuerier::new(querier);
-    let spot_price =
-        pm_querier.spot_price(pool_config.id, pool_config.token0, pool_config.token1)?;
-
-    Ok(Decimal::from_str(&spot_price.spot_price)?)
-}
-
-pub fn get_single_sided_deposit_0_to_1_swap_amount(
-    querier: &QuerierWrapper,
-    token0_balance: Uint128,
-    lower_tick: i64,
-    current_tick: i64,
-    upper_tick: i64,
-    pool_config: Pool,
-) -> Result<Uint128, ContractError> {
-    let spot_price = Decimal256::from(get_spot_price(querier, pool_config)?);
-    let lower_price = tick_to_price(lower_tick)?;
-    let current_price = tick_to_price(current_tick)?;
-    let upper_price = tick_to_price(upper_tick)?;
-    let pool_metadata_constant_times_spot_price: Decimal256 = current_price
-        .sqrt()
-        .checked_mul(lower_price.sqrt())?
-        .checked_mul(upper_price.sqrt().checked_sub(current_price.sqrt())?)?
-        .checked_div(current_price.sqrt().checked_sub(lower_price.sqrt())?)?
-        .checked_mul(spot_price)?;
-
-    let denominator = Decimal256::one()
-        .checked_add(Decimal256::one().checked_div(pool_metadata_constant_times_spot_price)?)?;
-
-    let swap_amount = token0_balance.checked_div(denominator.to_uint_floor().try_into()?)?;
-
-    Ok(swap_amount)
-}
-
-pub fn get_single_sided_deposit_1_to_0_swap_amount(
-    querier: &QuerierWrapper,
-    token1_balance: Uint128,
-    lower_tick: i64,
-    current_tick: i64,
-    upper_tick: i64,
-    pool_config: Pool,
-) -> Result<Uint128, ContractError> {
-    let spot_price = Decimal256::from(get_spot_price(querier, pool_config)?);
-    let lower_price = tick_to_price(lower_tick)?;
-    let current_price = tick_to_price(current_tick)?;
-    let upper_price = tick_to_price(upper_tick)?;
-    let pool_metadata_constant_over_spot_price: Decimal256 = current_price
-        .sqrt()
-        .checked_mul(lower_price.sqrt())?
-        .checked_mul(upper_price.sqrt().checked_sub(current_price.sqrt())?)?
-        .checked_div(current_price.sqrt().checked_sub(lower_price.sqrt())?)?
-        .checked_div(spot_price)?;
-
-    let denominator = Decimal256::one().checked_add(pool_metadata_constant_over_spot_price)?;
-
-    let swap_amount = token1_balance.checked_div(denominator.to_uint_floor().try_into()?)?;
-
-    Ok(swap_amount)
 }
 
 pub fn calc_amount_0_one_unit_liq(

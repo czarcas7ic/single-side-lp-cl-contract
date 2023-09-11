@@ -1,5 +1,5 @@
 {
-  "contract_name": "osmosis-single-sided-swap",
+  "contract_name": "osmosis-single-sided-lp-cl",
   "contract_version": "0.1.0",
   "idl_version": "1.0.0",
   "instantiate": {
@@ -12,16 +12,10 @@
     ],
     "properties": {
       "owner": {
-        "$ref": "#/definitions/Addr"
-      }
-    },
-    "additionalProperties": false,
-    "definitions": {
-      "Addr": {
-        "description": "A human readable address.\n\nIn Cosmos, this is typically bech32 encoded. But for multi-chain smart contracts no assumptions should be made other than being UTF-8 encoded and of reasonable length.\n\nThis type represents a validated address. It can be created in the following ways 1. Use `Addr::unchecked(input)` 2. Use `let checked: Addr = deps.api.addr_validate(input)?` 3. Use `let checked: Addr = deps.api.addr_humanize(canonical_addr)?` 4. Deserialize from JSON. This must only be done from JSON that was validated before such as a contract's state. `Addr` must not be used in messages sent by the user because this would result in unvalidated instances.\n\nThis type is immutable. If you really need to mutate it (Really? Are you sure?), create a mutable copy using `let mut mutable = Addr::to_string()` and operate on that `String` instance.",
         "type": "string"
       }
-    }
+    },
+    "additionalProperties": false
   },
   "execute": {
     "$schema": "http://json-schema.org/draft-07/schema#",
@@ -32,17 +26,17 @@
         "description": "Execute a swap and forward it to the receiver address on the specified ibc channel",
         "type": "object",
         "required": [
-          "create_position"
+          "single_sided_swap_and_join"
         ],
         "properties": {
-          "create_position": {
+          "single_sided_swap_and_join": {
             "type": "object",
             "required": [
               "lower_tick",
               "pool_id",
               "token_min_amount0",
               "token_min_amount1",
-              "tokens_provided",
+              "token_provided",
               "upper_tick"
             ],
             "properties": {
@@ -61,11 +55,8 @@
               "token_min_amount1": {
                 "$ref": "#/definitions/Uint128"
               },
-              "tokens_provided": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/definitions/Coin"
-                }
+              "token_provided": {
+                "$ref": "#/definitions/Coin"
               },
               "upper_tick": {
                 "type": "integer",

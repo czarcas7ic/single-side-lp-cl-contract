@@ -1,18 +1,17 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::Addr;
 use cosmwasm_std::{Coin, Uint128};
 
 /// Message type for `instantiate` entry_point
 #[cw_serde]
 pub struct InstantiateMsg {
-    pub owner: Addr,
+    pub owner: String,
 }
 
 /// Message type for `execute` entry_point
 #[cw_serde]
 pub enum ExecuteMsg {
     /// Execute a swap and forward it to the receiver address on the specified ibc channel
-    CreatePosition {
+    SingleSidedSwapAndJoin {
         pool_id: u64,
         lower_tick: i64,
         upper_tick: i64,

@@ -1,7 +1,6 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Addr, Coin, Uint128};
 use cw_storage_plus::{Item, Map};
-use osmosis_std::types::osmosis::poolmanager::v1beta1::MsgSwapExactAmountIn;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -22,7 +21,6 @@ pub struct SwapMsgReplyState {
     pub token_min_amount1: Uint128,
     pub token_provided_remaining_coin: Coin,
     pub token_out_denom: String,
-    pub swap_msg: MsgSwapExactAmountIn,
 }
 
 pub const SWAP_REPLY_STATES: Map<u64, SwapMsgReplyState> = Map::new("swap_reply_states");

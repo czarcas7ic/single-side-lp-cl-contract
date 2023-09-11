@@ -13,7 +13,7 @@ use crate::state::{Config, CONFIG};
 pub const SWAP_REPLY_ID: u64 = 1u64;
 
 // version info for migration info
-const CONTRACT_NAME: &str = "crates.io:outpost";
+const CONTRACT_NAME: &str = "crates.io:osmosis-single-sided-swap-and-lp";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Handling contract instantiation
@@ -26,7 +26,9 @@ pub fn instantiate(
 ) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
-    let state = Config { owner: msg.owner };
+    let owner = deps.api.addr_validate(&msg.owner)?;
+    let state = Config { owner };
+
     CONFIG.save(deps.storage, &state)?;
     Ok(Response::new().add_attribute("method", "instantiate"))
 }
@@ -45,7 +47,7 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     match msg {
-        ExecuteMsg::CreatePosition {
+        ExecuteMsg::SingleSidedSwapAndJoin {
             pool_id,
             lower_tick,
             upper_tick,

@@ -6,3 +6,6 @@ pub mod state;
 pub mod tick;
 
 pub use crate::error::ContractError;
+
+#[cfg(test)]
+mod test_tube;
