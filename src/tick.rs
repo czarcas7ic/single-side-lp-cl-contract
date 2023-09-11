@@ -7,8 +7,8 @@ use crate::ContractError;
 const MAX_SPOT_PRICE: &str = "100000000000000000000000000000000000000"; // 10^35
 const MIN_SPOT_PRICE: &str = "0.000000000001"; // 10^-12
 const EXPONENT_AT_PRICE_ONE: i64 = -6;
-const MIN_INITIALIZED_TICK: i64 = -108000000;
-const MAX_TICK: i128 = 342000000;
+pub const MIN_INITIALIZED_TICK: i64 = -108000000;
+pub const MAX_TICK: i128 = 342000000;
 
 // The methods in this file are copied from the Quasar cl vault contract.
 

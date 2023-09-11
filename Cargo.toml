@@ -58,6 +58,7 @@ serde-cw-value = "0.7.0"
 bech32 = "0.9.1"
 cw-utils = "1.0.0"
 itertools = "0.10"
+prost = "0.11.6"
 
 [dev-dependencies]
 osmosis-test-tube = {git = 'https://github.com/osmosis-labs/test-tube.git', version = "19.0.0"}

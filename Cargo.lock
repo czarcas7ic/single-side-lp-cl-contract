@@ -2049,6 +2049,7 @@ dependencies = [
  "itertools",
  "osmosis-std",
  "osmosis-test-tube",
+ "prost 0.11.9",
  "schemars",
  "serde",
  "serde-cw-value",

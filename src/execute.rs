@@ -103,7 +103,7 @@ pub fn single_sided_swap_and_lp(
             token_out_denom: token_out_denom.clone(),
         }],
         token_in: Some(token_in.into()),
-        token_out_min_amount: "0".to_string(),
+        token_out_min_amount: "1".to_string(),
     };
 
     // Execute the swap on behalf of the user
