@@ -58,7 +58,7 @@ fn get_wasm_byte_code() -> Vec<u8> {
     std::fs::read(
         manifest_path
             .join(".")
-            .join("test-tube-build")
+            .join("target")
             .join("wasm32-unknown-unknown")
             .join("release")
             .join("single_sided_lp_cl.wasm"),

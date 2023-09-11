@@ -1,1 +1,1 @@
-mod rewards;
+mod swap_and_join;

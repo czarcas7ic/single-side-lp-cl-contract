@@ -1,130 +1,36 @@
 mod modules;
 mod tests;
 
-use std::collections::HashMap;
-
-use crate::test_tube::modules::{Authz, GammExt, Lockup, SingleSidedLpCl};
+use crate::test_tube::modules::{Authz, SingleSidedLpCl};
 
 use cosmwasm_std::{Coin, Uint128};
 use osmosis_std::types::osmosis::concentratedliquidity::v1beta1::{
     CreateConcentratedLiquidityPoolsProposal, MsgCreatePosition, Pool, PoolRecord, PoolsRequest,
-    UserPositionsRequest,
 };
 use prost::Message;
 
 use crate::tick::{MAX_TICK, MIN_INITIALIZED_TICK};
-use osmosis_std::types::osmosis::{lockup, poolmanager::v1beta1::PoolType};
-use osmosis_test_tube::{cosmrs, osmosis_std::types::osmosis::lockup::AccountLockedCoinsRequest};
 use osmosis_test_tube::{
-    osmosis_std::types::cosmos::bank::v1beta1::QueryAllBalancesRequest,
-    osmosis_std::{
-        shim::Duration,
-        types::osmosis::{
-            gamm::v1beta1::MsgJoinPoolResponse,
-            lockup::{AccountLockedCoinsResponse, MsgLockTokens},
-        },
-    },
-    Account, Bank, ConcentratedLiquidity, GovWithAppAccess, Module, OsmosisTestApp, SigningAccount,
+    Account, Bank, ConcentratedLiquidity, GovWithAppAccess, Module, OsmosisTestApp,
 };
 
 struct TestEnvBuilder<'a> {
     app: &'a OsmosisTestApp,
-    pools: HashMap<String, (PoolType, Vec<Coin>)>,
-    user_locked_lp: Vec<(String, Vec<Coin>)>,
-    additional_user_balances: Vec<Coin>,
 }
 
 impl<'a> TestEnvBuilder<'a> {
-    fn new(app: &'a OsmosisTestApp) -> Self {
-        Self {
-            app,
-            pools: HashMap::new(),
-            user_locked_lp: vec![],
-            additional_user_balances: vec![],
-        }
-    }
     fn new_with_defaults(app: &'a OsmosisTestApp) -> Self {
-        Self {
-            app,
-            pools: HashMap::from([
-                (
-                    "osmo/usdt".to_string(),
-                    (
-                        PoolType::Balancer,
-                        vec![
-                            Coin::new(100_000_000_000, "uosmo".to_string()),
-                            Coin::new(100_000_000_000, "uusdt".to_string()),
-                        ],
-                    ),
-                ),
-                (
-                    "osmo/usdc".to_string(),
-                    (
-                        PoolType::Balancer,
-                        vec![
-                            Coin::new(100_000_000_000, "uosmo".to_string()),
-                            Coin::new(100_000_000_000, "uusdc".to_string()),
-                        ],
-                    ),
-                ),
-                (
-                    "usdc/usdt".to_string(),
-                    (
-                        PoolType::Stableswap,
-                        vec![
-                            Coin::new(100_000_000_000, "uusdc".to_string()),
-                            Coin::new(100_000_000_000, "uusdt".to_string()),
-                        ],
-                    ),
-                ),
-            ]),
-            user_locked_lp: vec![(
-                "osmo/usdc".to_string(),
-                vec![
-                    Coin::new(100_000_000, "uosmo".to_string()),
-                    Coin::new(100_000_000, "uusdc".to_string()),
-                ],
-            )],
-            additional_user_balances: vec![],
-        }
-    }
-
-    fn with_pool(mut self, pool_type: PoolType, pool_name: &str, coins: Vec<Coin>) -> Self {
-        let mut coins = coins;
-        coins.sort_by(|a, b| a.denom.cmp(&b.denom));
-        self.pools.insert(pool_name.to_string(), (pool_type, coins));
-        self
-    }
-
-    fn with_user_locked_lp(mut self, pool_name: &str, coins: Vec<Coin>) -> Self {
-        self.user_locked_lp.push((pool_name.to_string(), coins));
-        self
-    }
-
-    fn with_addtional_user_balances(mut self, coins: Vec<Coin>) -> Self {
-        self.additional_user_balances = coins;
-        self
+        Self { app }
     }
 
     fn build(self) -> TestEnv<'a> {
         let app = self.app;
         // # Setup
         let authz = Authz::new(app);
-        let gamm_ext = GammExt::new(app);
         let bank = Bank::new(app);
-        let lockup = Lockup::new(app);
         let cl = ConcentratedLiquidity::new(app);
         let gov = GovWithAppAccess::new(app);
 
-        let user_balances = sum_duplicated_coins(
-            self.user_locked_lp
-                .iter()
-                .flat_map(|(_, coins)| coins.clone())
-                .chain(self.additional_user_balances)
-                .collect(),
-        );
-
-        let user = app.init_account(&user_balances).unwrap();
         let admin = app
             .init_account(&[
                 Coin::new(100_000_000_000_000, "uosmo"),
@@ -197,8 +103,8 @@ impl<'a> TestEnvBuilder<'a> {
                 pool_records: vec![PoolRecord {
                     denom0: "uatom".to_string(),
                     denom1: "uosmo".to_string(),
-                    tick_spacing: 1,
-                    spread_factor: "0".to_string(),
+                    tick_spacing: 100,
+                    spread_factor: "100000000000000".to_string(),
                 }],
             },
             admin.address(),
@@ -236,68 +142,19 @@ impl<'a> TestEnvBuilder<'a> {
         TestEnv {
             authz,
             bank,
-            lockup,
-            user,
             single_sided_lp_cl: singe_sided_lp_cl,
         }
     }
 }
 
-fn sum_duplicated_coins(coins: Vec<Coin>) -> Vec<Coin> {
-    coins
-        .into_iter()
-        .fold(HashMap::new(), |mut acc, coin| {
-            let coin_entry = *acc.entry(coin.denom.clone()).or_insert(0);
-            acc.insert(coin.denom, coin_entry + coin.amount.u128());
-            acc
-        })
-        .into_iter()
-        .map(|(denom, amount)| Coin::new(amount, denom))
-        .collect::<Vec<_>>()
-}
-
 struct TestEnv<'a> {
     pub authz: Authz<'a, OsmosisTestApp>,
     pub bank: Bank<'a, OsmosisTestApp>,
-    pub lockup: Lockup<'a, OsmosisTestApp>,
-    pub user: SigningAccount,
     pub single_sided_lp_cl: SingleSidedLpCl<'a>,
 }
 
 impl<'a> TestEnv<'a> {
     fn setup(app: &'a OsmosisTestApp) -> TestEnv<'a> {
         TestEnvBuilder::new_with_defaults(app).build()
-    }
-
-    fn assert_user_balances(&self, expected_balances: Vec<Coin>) {
-        let user_balances: Vec<Coin> = self
-            .bank
-            .query_all_balances(&QueryAllBalancesRequest {
-                address: self.user.address(),
-                pagination: None,
-            })
-            .unwrap()
-            .balances
-            .into_iter()
-            .map(|coin| Coin::new(coin.amount.parse().unwrap(), coin.denom))
-            .collect();
-
-        assert_eq!(user_balances, expected_balances);
-    }
-
-    fn assert_empty_contract_balance(&self) {
-        let contract_balances: Vec<Coin> = self
-            .bank
-            .query_all_balances(&QueryAllBalancesRequest {
-                address: self.single_sided_lp_cl.contract_addr.to_string(),
-                pagination: None,
-            })
-            .unwrap()
-            .balances
-            .into_iter()
-            .map(|coin| Coin::new(coin.amount.parse().unwrap(), coin.denom))
-            .collect();
-
-        assert_eq!(contract_balances, vec![]);
     }
 }
