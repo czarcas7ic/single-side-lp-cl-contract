@@ -1,7 +1,9 @@
 use std::str::FromStr;
 
-use cosmwasm_std::{Decimal, Decimal256};
+use cosmwasm_std::Uint128;
+use cosmwasm_std::{Decimal, Decimal256, Storage};
 
+use crate::state::{TickExpIndexData, TICK_EXP_CACHE};
 use crate::ContractError;
 
 const MAX_SPOT_PRICE: &str = "100000000000000000000000000000000000000"; // 10^35
@@ -78,6 +80,105 @@ pub fn tick_to_price(tick_index: i64) -> Result<Decimal256, ContractError> {
     Ok(price)
 }
 
+pub fn price_to_tick(storage: &mut dyn Storage, price: Decimal256) -> Result<i128, ContractError> {
+    if price > Decimal256::from_str(MAX_SPOT_PRICE)?
+        || price < Decimal256::from_str(MIN_SPOT_PRICE)?
+    {
+        return Err(ContractError::PriceBoundError { price });
+    }
+    if price == Decimal256::one() {
+        // return Ok(0i128);
+        return Ok(0i128);
+    }
+
+    // TODO: move this to instantiate?
+    build_tick_exp_cache(storage)?;
+
+    let mut geo_spacing;
+    if price > Decimal256::one() {
+        let mut index = 0i64;
+        geo_spacing = TICK_EXP_CACHE.load(storage, index)?;
+        while geo_spacing.max_price < price {
+            index += 1;
+            geo_spacing = TICK_EXP_CACHE.load(storage, index)?;
+        }
+    } else {
+        let mut index = -1;
+        geo_spacing = TICK_EXP_CACHE.load(storage, index)?;
+        while geo_spacing.initial_price > price {
+            index -= 1;
+            geo_spacing = TICK_EXP_CACHE.load(storage, index)?;
+        }
+    }
+    let price_in_this_exponent = price - geo_spacing.initial_price;
+
+    let ticks_filled_by_current_spacing =
+        price_in_this_exponent / geo_spacing.additive_increment_per_tick;
+
+    // TODO: Optimize this type conversion
+    let ticks_filled_uint_floor = ticks_filled_by_current_spacing.to_uint_floor();
+    let ticks_filled_int: i128 = Uint128::try_from(ticks_filled_uint_floor)?
+        .u128()
+        .try_into()
+        .unwrap();
+
+    let tick_index = geo_spacing.initial_tick as i128 + ticks_filled_int;
+
+    Ok(tick_index)
+}
+
+fn build_tick_exp_cache(storage: &mut dyn Storage) -> Result<(), ContractError> {
+    // Build positive indices
+    let mut max_price = Decimal256::one();
+    let mut cur_exp_index = 0i64;
+
+    while max_price < Decimal256::from_str(MAX_SPOT_PRICE)? {
+        let tick_exp_index_data = TickExpIndexData {
+            initial_price: pow_ten_internal_dec_256(cur_exp_index)?,
+            max_price: pow_ten_internal_dec_256(cur_exp_index + 1)?,
+            additive_increment_per_tick: pow_ten_internal_dec_256(
+                EXPONENT_AT_PRICE_ONE + cur_exp_index,
+            )?,
+            initial_tick: (9u128
+                .checked_mul(pow_ten_internal_u128(-EXPONENT_AT_PRICE_ONE)?)
+                .ok_or(ContractError::Overflow {})? as i64)
+                .checked_mul(cur_exp_index)
+                .ok_or(ContractError::Overflow {})?,
+        };
+        TICK_EXP_CACHE.save(storage, cur_exp_index, &tick_exp_index_data)?;
+
+        max_price = tick_exp_index_data.max_price;
+        cur_exp_index += 1;
+    }
+
+    // Build negative indices
+    let mut min_price = Decimal256::one();
+    cur_exp_index = -1;
+    while min_price > Decimal256::from_str(MIN_SPOT_PRICE)? {
+        let initial_price = pow_ten_internal_dec_256(cur_exp_index)?;
+        let max_price = pow_ten_internal_dec_256(cur_exp_index + 1)?;
+        let additive_increment_per_tick =
+            pow_ten_internal_dec_256(EXPONENT_AT_PRICE_ONE + cur_exp_index)?;
+        let initial_tick = (9u128
+            .checked_mul(pow_ten_internal_u128(-EXPONENT_AT_PRICE_ONE)?)
+            .ok_or(ContractError::Overflow {})? as i64)
+            .checked_mul(cur_exp_index)
+            .ok_or(ContractError::Overflow {})?;
+
+        let tick_exp_index_data = TickExpIndexData {
+            initial_price,
+            max_price,
+            additive_increment_per_tick,
+            initial_tick,
+        };
+        TICK_EXP_CACHE.save(storage, cur_exp_index, &tick_exp_index_data)?;
+
+        min_price = tick_exp_index_data.initial_price;
+        cur_exp_index -= 1;
+    }
+    Ok(())
+}
+
 // same as pow_ten_internal but returns a Decimal to work with negative exponents
 fn pow_ten_internal_dec(exponent: i64) -> Result<Decimal, ContractError> {
     let p = 10u128
@@ -101,8 +202,24 @@ fn pow_ten_internal_dec_256(exponent: i64) -> Result<Decimal256, ContractError> 
     }
 }
 
+// due to pow restrictions we need to use unsigned integers; i.e. 10.pow(-exp: u32)
+// so if the resulting power is positive, we take 10**exp;
+// and if it is negative, we take 1/10**exp.
+fn pow_ten_internal_u128(exponent: i64) -> Result<u128, ContractError> {
+    if exponent >= 0 {
+        10u128
+            .checked_pow(exponent.unsigned_abs() as u32)
+            .ok_or(ContractError::Overflow {})
+    } else {
+        // TODO: write tests for negative exponents as it looks like this will always be 0
+        Err(ContractError::CannotHandleNegativePowersInUint {})
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use cosmwasm_std::testing::mock_dependencies;
+
     use super::*;
 
     #[test]
@@ -215,5 +332,122 @@ mod tests {
 
         // example20
         assert!(tick_to_price(MIN_INITIALIZED_TICK - 1).is_err());
+    }
+
+    #[test]
+    fn test_price_to_tick() {
+        let mut deps = mock_dependencies();
+        // example1
+        let mut price = Decimal256::from_str("30352").unwrap();
+        let mut expected_tick_index = 38035200;
+        let mut tick_index = price_to_tick(deps.as_mut().storage, price).unwrap();
+        assert_eq!(tick_index, expected_tick_index);
+
+        // example2
+        price = Decimal256::from_str("30353").unwrap();
+        expected_tick_index = 38035300;
+        tick_index = price_to_tick(deps.as_mut().storage, price).unwrap();
+        assert_eq!(expected_tick_index, tick_index);
+
+        // example3
+        price = Decimal256::from_str("0.000011790").unwrap();
+        expected_tick_index = -44821000;
+        tick_index = price_to_tick(deps.as_mut().storage, price).unwrap();
+        assert_eq!(expected_tick_index, tick_index);
+
+        // example4
+        price = Decimal256::from_str("0.000011791").unwrap();
+        expected_tick_index = -44820900;
+        tick_index = price_to_tick(deps.as_mut().storage, price).unwrap();
+        assert_eq!(tick_index, expected_tick_index);
+
+        // example5
+        price = Decimal256::from_str("0.068960").unwrap();
+        expected_tick_index = -12104000;
+        tick_index = price_to_tick(deps.as_mut().storage, price).unwrap();
+        assert_eq!(tick_index, expected_tick_index);
+
+        // example6
+        price = Decimal256::from_str("0.068961").unwrap();
+        expected_tick_index = -12103900;
+        tick_index = price_to_tick(deps.as_mut().storage, price).unwrap();
+        assert_eq!(tick_index, expected_tick_index);
+
+        // example7
+        price = Decimal256::from_str("99999000000000000000000000000000000000").unwrap();
+        expected_tick_index = MAX_TICK - 100;
+        tick_index = price_to_tick(deps.as_mut().storage, price).unwrap();
+        assert_eq!(tick_index, expected_tick_index);
+
+        // example8
+        price = Decimal256::from_str(MAX_SPOT_PRICE).unwrap();
+        expected_tick_index = MAX_TICK;
+        tick_index = price_to_tick(deps.as_mut().storage, price).unwrap();
+        assert_eq!(tick_index, expected_tick_index);
+
+        // example9
+        price = Decimal256::from_str("0.007406").unwrap();
+        expected_tick_index = -20594000;
+        tick_index = price_to_tick(deps.as_mut().storage, price).unwrap();
+        assert_eq!(tick_index, expected_tick_index);
+
+        // example10
+        price = Decimal256::from_str("0.0074061").unwrap();
+        expected_tick_index = -20593900;
+        tick_index = price_to_tick(deps.as_mut().storage, price).unwrap();
+        assert_eq!(tick_index, expected_tick_index);
+
+        // example11
+        price = Decimal256::from_str("0.00077960").unwrap();
+        expected_tick_index = -29204000;
+        tick_index = price_to_tick(deps.as_mut().storage, price).unwrap();
+        assert_eq!(tick_index, expected_tick_index);
+
+        // example12
+        price = Decimal256::from_str("0.00077961").unwrap();
+        expected_tick_index = -29203900;
+        tick_index = price_to_tick(deps.as_mut().storage, price).unwrap();
+        assert_eq!(tick_index, expected_tick_index);
+
+        // example13
+        price = Decimal256::from_str("0.068500").unwrap();
+        expected_tick_index = -12150000;
+        tick_index = price_to_tick(deps.as_mut().storage, price).unwrap();
+        assert_eq!(tick_index, expected_tick_index);
+
+        // example14
+        price = Decimal256::from_str("0.068501").unwrap();
+        expected_tick_index = -12149900;
+        tick_index = price_to_tick(deps.as_mut().storage, price).unwrap();
+        assert_eq!(tick_index, expected_tick_index);
+
+        // example15
+        price = Decimal256::from_str("25760000").unwrap();
+        expected_tick_index = 64576000;
+        tick_index = price_to_tick(deps.as_mut().storage, price).unwrap();
+        assert_eq!(tick_index, expected_tick_index);
+
+        // example16
+        price = Decimal256::from_str("25761000").unwrap();
+        expected_tick_index = 64576100;
+        tick_index = price_to_tick(deps.as_mut().storage, price).unwrap();
+        assert_eq!(tick_index, expected_tick_index);
+
+        // example17
+        price = Decimal256::from_str("1").unwrap();
+        expected_tick_index = 0;
+        tick_index = price_to_tick(deps.as_mut().storage, price).unwrap();
+        assert_eq!(tick_index, expected_tick_index);
+
+        // example18: (won't work)... Decimal256 cannot be negative
+        assert!(Decimal256::from_str("-1").is_err());
+
+        // example19
+        price = Decimal256::from_str(MAX_SPOT_PRICE).unwrap() + Decimal256::one();
+        assert!(price_to_tick(deps.as_mut().storage, price).is_err());
+
+        // example20
+        price = Decimal256::from_str(MIN_SPOT_PRICE).unwrap() / Decimal256::from_str("10").unwrap();
+        assert!(price_to_tick(deps.as_mut().storage, price).is_err());
     }
 }

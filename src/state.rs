@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, Coin, Uint128};
+use cosmwasm_std::{Addr, Coin, Decimal256, Uint128};
 use cw_storage_plus::{Item, Map};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -10,6 +10,16 @@ pub struct Config {
 }
 
 pub const CONFIG: Item<Config> = Item::new("config");
+
+#[cw_serde]
+pub struct TickExpIndexData {
+    pub initial_price: Decimal256,
+    pub max_price: Decimal256,
+    pub additive_increment_per_tick: Decimal256,
+    pub initial_tick: i64,
+}
+
+pub const TICK_EXP_CACHE: Map<i64, TickExpIndexData> = Map::new("tick_exp_cache");
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, JsonSchema)]
 pub struct SwapMsgReplyState {

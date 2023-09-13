@@ -70,8 +70,7 @@ pub fn execute(
 
 #[cfg_attr(not(feature = "imported"), entry_point)]
 pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> Result<Response, ContractError> {
-    deps.api
-        .debug(&format!("executing swaprouter reply: {msg:?}"));
+    deps.api.debug(&format!("executing swap reply: {msg:?}"));
     if msg.id == SWAP_REPLY_ID {
         // get intermediate swap reply state. Error if not found.
         let swap_msg_state = SWAP_REPLY_STATES.load(deps.storage, msg.id)?;
